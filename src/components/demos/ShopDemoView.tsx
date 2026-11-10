@@ -1,309 +1,129 @@
-import React, { useState } from 'react';
-import { ShoppingBag, Phone, MapPin, Clock, Tag, MessageCircle, Check, Star } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowLeft, ArrowRight, Check, ChevronDown, Heart, Menu, Minus, Plus, Search, ShoppingBag, SlidersHorizontal, X } from 'lucide-react';
 import { BusinessConfig, Language } from '../../types';
+import { ClothingStoreConfig, defaultClothingStore, demoClothingProducts, StoreProduct } from '../../data/storefront';
 
-interface ShopDemoViewProps {
-  config: BusinessConfig;
-  lang: Language;
-}
+type CartLine = { productId: string; quantity: number; size: string; color: string };
+type Customer = { name: string; mobile: string; address: string; city: string; pin: string };
+const PRODUCT_KEY = 'smartweb-clothing-products-v1';
+const STORE_KEY = 'smartweb-clothing-store-v1';
+const CART_KEY = 'smartweb-clothing-cart-v1';
+const money = (amount: number) => `₹${amount.toLocaleString('en-IN')}`;
+const cleanNumber = (value: string) => value.replace(/\D/g, '');
 
-export const ShopDemoView: React.FC<ShopDemoViewProps> = ({ config, lang }) => {
-  const isHi = lang === 'hi';
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'clothing' | 'festive' | 'daily'>('all');
-  const [cartNotice, setCartNotice] = useState<string | null>(null);
+interface ShopDemoViewProps { config: BusinessConfig; lang: Language }
 
-  const products = [
-    {
-      id: 1,
-      name: isHi ? 'लखनवी चिकनकारी कुर्ता सेट' : 'Lucknowi Chikankari Kurta Set',
-      price: 1299,
-      originalPrice: 1899,
-      tag: isHi ? 'बेस्ट सेलर' : 'Best Seller',
-      category: 'clothing',
-      desc: isHi ? 'प्योर कॉटन, हाथ की महीन कढ़ाई, सभी साइज उपलब्ध' : 'Pure cotton, authentic hand embroidery, sizes M to XXL',
-    },
-    {
-      id: 2,
-      name: isHi ? 'चंदेरी सिल्क बनारसी साड़ी' : 'Chanderi Silk Banarasi Saree',
-      price: 2499,
-      originalPrice: 3499,
-      tag: isHi ? 'प्रीमियम' : 'Premium',
-      category: 'festive',
-      desc: isHi ? 'जरी बॉर्डर, मैचिंग ब्लाउज पीस सहित, उत्सव स्पेशल' : 'Zari woven border with matching blouse piece, festival special',
-    },
-    {
-      id: 3,
-      name: isHi ? 'हैंडक्राफ्टेड दुपट्टा कलेक्शन' : 'Handcrafted Dupatta Collection',
-      price: 599,
-      originalPrice: 899,
-      tag: isHi ? 'नई वैरायटी' : 'New Arrival',
-      category: 'clothing',
-      desc: isHi ? 'मल्टीकलर फ्लोरल डिजाइन, हल्के वजन में सुंदर लुक' : 'Multicolor floral design, lightweight elegant drape',
-    },
-    {
-      id: 4,
-      name: isHi ? 'डिजाइनर कॉटन अनारकली सूट' : 'Designer Cotton Anarkali Suit',
-      price: 1899,
-      originalPrice: 2699,
-      tag: isHi ? 'ट्रेंडिंग' : 'Trending',
-      category: 'festive',
-      desc: isHi ? 'दुपट्टा और पैंट के साथ 3-पीस सेट, पार्टी वियर' : 'Complete 3-piece set with dupatta and pants, party wear',
-    },
-    {
-      id: 5,
-      name: isHi ? 'डेली वियर कॉटन कुर्तियां (कॉम्बो 2)' : 'Daily Wear Cotton Kurtis (Pack of 2)',
-      price: 899,
-      originalPrice: 1399,
-      tag: isHi ? 'ऑफर' : 'Offer',
-      category: 'daily',
-      desc: isHi ? 'ऑफिस और कॉलेज के लिए आरामदायक सूती फैब्रिक' : 'Comfortable breathable fabric for office and daily casual wear',
-    },
-    {
-      id: 6,
-      name: isHi ? 'ज्वेलरी व मैचिंग एक्सेसरी सेट' : 'Matching Festive Jewellery Set',
-      price: 499,
-      originalPrice: 799,
-      tag: isHi ? 'लोकप्रिय' : 'Popular',
-      category: 'daily',
-      desc: isHi ? 'कुंदन वर्क झुमका एवं नेकलेस सेट' : 'Kundan work earrings and choker necklace set',
-    },
-  ];
+export const ShopDemoView: React.FC<ShopDemoViewProps> = ({ config: agencyConfig, lang: initialLanguage }) => {
+  const [store, setStore] = useState<ClothingStoreConfig>(() => {
+    try { return { ...defaultClothingStore, ...JSON.parse(localStorage.getItem(STORE_KEY) || '{}') }; } catch { return defaultClothingStore; }
+  });
+  const [products, setProducts] = useState<StoreProduct[]>(() => {
+    try { return JSON.parse(localStorage.getItem(PRODUCT_KEY) || 'null') || demoClothingProducts; } catch { return demoClothingProducts; }
+  });
+  const [cart, setCart] = useState<CartLine[]>(() => {
+    try { return JSON.parse(localStorage.getItem(CART_KEY) || '[]'); } catch { return []; }
+  });
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState('All');
+  const [activeProduct, setActiveProduct] = useState<StoreProduct | null>(null);
+  const [drawer, setDrawer] = useState<'cart' | 'checkout' | 'admin' | null>(null);
+  const [adminReady, setAdminReady] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [adminTab, setAdminTab] = useState<'products' | 'store'>('products');
+  const [editing, setEditing] = useState<StoreProduct | null>(null);
+  const [formError, setFormError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [mobileMenu, setMobileMenu] = useState(false);
+  const [customer, setCustomer] = useState<Customer>({ name: '', mobile: '', address: '', city: '', pin: '' });
+  const [selectedSize, setSelectedSize] = useState('');
+  const [selectedColor, setSelectedColor] = useState('');
+  const isHi = store.language === 'hi';
+  const text = (en: string, hi: string) => isHi ? hi : en;
+  const productById = (id: string) => products.find((p) => p.id === id);
+  const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
+  const subtotal = cart.reduce((sum, line) => sum + (productById(line.productId)?.price || 0) * line.quantity, 0);
+  const filtered = useMemo(() => products.filter((p) => p.stock > 0 && (category === 'All' || p.category === category) && `${p.name} ${p.description} ${p.category}`.toLowerCase().includes(query.toLowerCase())), [products, category, query]);
+  const featured = products.filter((p) => p.featured && p.stock > 0);
 
-  const filteredProducts = selectedCategory === 'all' 
-    ? products 
-    : products.filter(p => p.category === selectedCategory);
+  useEffect(() => { localStorage.setItem(STORE_KEY, JSON.stringify(store)); }, [store]);
+  useEffect(() => { localStorage.setItem(PRODUCT_KEY, JSON.stringify(products)); }, [products]);
+  useEffect(() => { localStorage.setItem(CART_KEY, JSON.stringify(cart)); }, [cart]);
+  useEffect(() => { if (!notice) return; const timer = window.setTimeout(() => setNotice(''), 2600); return () => window.clearTimeout(timer); }, [notice]);
 
-  const handleOrder = (productName: string, price: number) => {
-    const text = encodeURIComponent(
-      `Hello ${config.businessName}, I would like to order "${productName}" (₹${price}) shown on your website. Please share available sizes and payment details.`
-    );
-    const cleanPhone = config.whatsapp.replace(/\D/g, '');
-    window.open(`https://wa.me/${cleanPhone}?text=${text}`, '_blank');
-    setCartNotice(productName);
-    setTimeout(() => setCartNotice(null), 4000);
+  const addToCart = (product: StoreProduct, size = product.sizes[0] || 'One size', color = product.colors[0] || 'Default') => {
+    if (product.stock < 1) return;
+    setCart((current) => {
+      const existing = current.find((line) => line.productId === product.id && line.size === size && line.color === color);
+      if (existing) return current.map((line) => line === existing ? { ...line, quantity: Math.min(line.quantity + 1, product.stock) } : line);
+      return [...current, { productId: product.id, quantity: 1, size, color }];
+    });
+    setNotice(text('Added to your bag', 'आपके बैग में जोड़ा गया'));
+    setActiveProduct(null);
   };
+  const changeQuantity = (line: CartLine, delta: number) => setCart((current) => current.map((item) => item === line ? { ...item, quantity: item.quantity + delta } : item).filter((item) => item.quantity > 0 && item.quantity <= (productById(item.productId)?.stock || 0)));
+  const saveStore = () => { setStore((current) => ({ ...current, whatsapp: cleanNumber(current.whatsapp) })); setNotice(text('Store settings saved on this device', 'स्टोर सेटिंग इस डिवाइस पर सेव हुई')); };
+  const openAdmin = () => { setDrawer('admin'); setAdminReady(false); setAdminPassword(''); };
+  const loginAdmin = (event: React.FormEvent) => { event.preventDefault(); if (adminPassword === 'demo123') { setAdminReady(true); setFormError(''); } else setFormError(text('Demo password is demo123', 'डेमो पासवर्ड demo123 है')); };
+  const saveProduct = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); const data = new FormData(event.currentTarget);
+    const next: StoreProduct = { id: editing?.id || `item-${Date.now()}`, name: String(data.get('name')).trim(), description: String(data.get('description')).trim(), price: Number(data.get('price')), compareAt: Number(data.get('compareAt')) || undefined, category: String(data.get('category')).trim(), image: String(data.get('image')).trim(), sizes: String(data.get('sizes')).split(',').map((v) => v.trim()).filter(Boolean), colors: String(data.get('colors')).split(',').map((v) => v.trim()).filter(Boolean), stock: Number(data.get('stock')), featured: data.get('featured') === 'on', bestseller: editing?.bestseller || false, isNew: editing?.isNew || false };
+    if (!next.name || !next.category || !next.image || next.price <= 0 || !Number.isFinite(next.stock)) { setFormError(text('Fill all required fields with valid values.', 'सभी जरूरी जानकारी सही भरें।')); return; }
+    setProducts((current) => editing ? current.map((p) => p.id === editing.id ? next : p) : [next, ...current]); setEditing(null); setFormError(''); setNotice(text('Product saved', 'उत्पाद सेव हुआ'));
+  };
+  const sendOrder = (event: React.FormEvent) => {
+    event.preventDefault(); setFormError('');
+    if (cart.length === 0) { setFormError(text('Your bag is empty.', 'आपका बैग खाली है।')); return; }
+    if (!/^[6-9]\d{9}$/.test(cleanNumber(customer.mobile))) { setFormError(text('Enter a valid 10-digit Indian mobile number.', 'सही 10 अंकों का मोबाइल नंबर डालें।')); return; }
+    if (!/^\d{6}$/.test(customer.pin)) { setFormError(text('Enter a valid 6-digit PIN code.', 'सही 6 अंकों का पिन कोड डालें।')); return; }
+    if (cleanNumber(store.whatsapp).length < 10) { setFormError(text('Shop WhatsApp is not configured. Ask the shop owner to set it in Demo Admin.', 'दुकान का WhatsApp सेट नहीं है। डेमो एडमिन में नंबर सेट करें।')); return; }
+    const lines = cart.map((line) => { const p = productById(line.productId)!; return `• ${p.name} — ${line.size}, ${line.color} × ${line.quantity}: ${money(p.price * line.quantity)}`; }).join('\n');
+    const message = `New website order (demo)\n\n${lines}\n\nSubtotal: ${money(subtotal)}\nDelivery: Confirm with store\nTotal: ${money(subtotal)}\n\nCustomer: ${customer.name}\nMobile: ${customer.mobile}\nAddress: ${customer.address}, ${customer.city} - ${customer.pin}`;
+    window.open(`https://wa.me/${cleanNumber(store.whatsapp)}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+    setNotice(text('Order details opened in WhatsApp. No payment was taken.', 'ऑर्डर विवरण WhatsApp में खुला। कोई भुगतान नहीं लिया गया।'));
+  };
+  const labels = (value: string) => value === 'All' ? text('All pieces', 'सभी') : value;
 
-  return (
-    <div className="bg-stone-50 text-stone-900 min-h-screen font-sans pb-16">
-      {/* Store Header */}
-      <div className="bg-amber-900 text-amber-50 px-4 py-2.5 text-xs text-center font-medium">
-        {isHi 
-          ? '🎉 त्योहारी महाबचत: दुकान पर आने पर ₹500 की विशेष छूट!'
-          : '🎉 Festival Mega Offer: Extra ₹500 off on in-store purchases above ₹2,000!'}
+  return <div className="min-h-screen bg-[#fbf9f6] text-[#29241f] font-sans" style={{ '--shop-primary': store.primary, '--shop-accent': store.accent } as React.CSSProperties}>
+    <div className="bg-[#29241f] text-white text-center px-4 py-2 text-[11px] sm:text-xs tracking-wide">{store.banner} <span className="ml-2 text-amber-200">{text('Complimentary delivery over ₹2,500', '₹2,500 से अधिक पर डिलीवरी निःशुल्क')}</span></div>
+    <header className="sticky top-0 z-30 bg-[#fbf9f6]/95 backdrop-blur border-b border-stone-200">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[72px] flex items-center justify-between gap-4">
+        <button className="md:hidden p-2" aria-label="Open menu" onClick={() => setMobileMenu(!mobileMenu)}><Menu size={21}/></button>
+        <a href="#home" className="flex items-center gap-2 min-w-0"><span className="w-9 h-9 rounded-full bg-[#32271f] text-white flex items-center justify-center font-serif">{store.logo ? <img src={store.logo} alt="" className="w-full h-full rounded-full object-cover"/> : store.name.charAt(0)}</span><span className="font-serif text-lg sm:text-xl tracking-wide truncate">{store.name}</span></a>
+        <nav className="hidden md:flex items-center gap-8 text-xs uppercase tracking-[.15em] text-stone-600"><a href="#collection" className="hover:text-black">{text('Shop', 'खरीदें')}</a><a href="#story" className="hover:text-black">{text('Our story', 'हमारी कहानी')}</a><a href="#benefits" className="hover:text-black">{text('The details', 'विशेषताएँ')}</a></nav>
+        <div className="flex items-center gap-1"><button onClick={() => setStore((s) => ({ ...s, language: s.language === 'en' ? 'hi' : 'en' }))} className="px-2 py-2 text-xs text-stone-600">{isHi ? 'EN' : 'हिं'}</button><button onClick={() => setDrawer('cart')} className="relative p-2.5 hover:bg-stone-100 rounded-full" aria-label="Open shopping bag"><ShoppingBag size={19}/>{cartCount > 0 && <span className="absolute -top-0.5 -right-0.5 bg-[#a46c48] text-white rounded-full text-[10px] min-w-4 h-4 flex items-center justify-center px-1">{cartCount}</span>}</button></div>
       </div>
+      {mobileMenu && <nav className="md:hidden px-5 pb-4 flex gap-5 text-xs uppercase tracking-widest"><a onClick={() => setMobileMenu(false)} href="#collection">{text('Shop', 'खरीदें')}</a><a onClick={() => setMobileMenu(false)} href="#story">{text('Our story', 'हमारी कहानी')}</a><a onClick={() => setMobileMenu(false)} href="#benefits">{text('Details', 'विशेषताएँ')}</a></nav>}
+    </header>
+    <main id="home">
+      <section className="max-w-[1440px] mx-auto px-3 sm:px-8 pt-4 sm:pt-8"><div className="relative min-h-[440px] sm:min-h-[590px] overflow-hidden bg-[#e7ddd0] flex items-center rounded-sm">
+        <img className="absolute inset-0 w-full h-full object-cover object-center" src="https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=1800&q=85" alt="Demonstration Indian festive fashion collection"/><div className="absolute inset-0 bg-gradient-to-r from-[#211a16]/75 via-[#211a16]/35 to-transparent"/>
+        <div className="relative z-10 text-white max-w-xl px-7 sm:px-16 py-14"><span className="text-[10px] sm:text-xs tracking-[.28em] uppercase text-amber-100">{text('A considered collection · Demo store', 'चुना हुआ कलेक्शन · डेमो स्टोर')}</span><h1 className="font-serif text-4xl sm:text-6xl leading-[1.08] mt-5 mb-5">{text('Made for the moments that matter.', 'हर खास पल के लिए खास अंदाज़।')}</h1><p className="text-sm sm:text-base text-white/85 max-w-md leading-relaxed mb-8">{text('Thoughtful Indian wear, crafted to feel like you. Discover pieces made to be worn, loved and lived in.', 'आपके लिए बना खूबसूरत भारतीय परिधान। ऐसे कपड़े जो हर दिन और हर मौके पर आपके साथ रहें।')}</p><a href="#collection" className="inline-flex items-center gap-3 bg-white text-stone-900 px-6 py-3 text-xs uppercase tracking-widest hover:bg-amber-50 transition">{text('Explore collection', 'कलेक्शन देखें')}<ArrowRight size={15}/></a></div>
+        <span className="absolute right-4 bottom-4 text-[9px] uppercase tracking-widest bg-black/45 text-white px-2 py-1">{text('Demo imagery', 'डेमो चित्र')}</span>
+      </div></section>
+      <section className="max-w-7xl mx-auto px-4 sm:px-8 py-9"><div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center text-[10px] sm:text-xs tracking-wide text-stone-600"><div className="py-3 border-r border-stone-200">✳ &nbsp; {text('Made with intention', 'सलीके से चुना गया')}</div><div className="py-3 md:border-r border-stone-200">↗ &nbsp; {text('Easy WhatsApp ordering', 'आसान WhatsApp ऑर्डर')}</div><div className="py-3 border-r border-stone-200">♡ &nbsp; {text('Thoughtful details', 'खास बारीकियाँ')}</div><div className="py-3">⌂ &nbsp; {text('Local, personal service', 'स्थानीय व्यक्तिगत सेवा')}</div></div></section>
+      {featured.length > 0 && <section className="max-w-7xl mx-auto px-4 sm:px-8 pb-14"><div className="flex justify-between items-end mb-5"><div><p className="text-[10px] uppercase tracking-[.2em] text-[#a46c48]">{text('Handpicked for you', 'आपके लिए चुना')}</p><h2 className="font-serif text-2xl sm:text-3xl mt-1">{text('The edit', 'खास पसंद')}</h2></div><a href="#collection" className="text-xs underline underline-offset-4">{text('View all', 'सब देखें')}</a></div><div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-5">{featured.slice(0, 3).map((p) => <ProductCard key={p.id} product={p} onClick={() => {setActiveProduct(p); setSelectedSize(p.sizes[0] || 'One size'); setSelectedColor(p.colors[0] || 'Default');}} text={text}/>)}</div></section>}
+      <section id="collection" className="bg-white border-y border-stone-200"><div className="max-w-7xl mx-auto px-4 sm:px-8 py-14"><div className="text-center mb-8"><p className="text-[10px] uppercase tracking-[.2em] text-[#a46c48]">{text('The collection', 'हमारा कलेक्शन')}</p><h2 className="font-serif text-3xl sm:text-4xl mt-2">{text('Find your new favourite', 'अपना नया पसंदीदा चुनें')}</h2><p className="text-xs text-stone-500 mt-3">{text('Thoughtful pieces for every day and every occasion.', 'हर दिन और हर खास मौके के लिए खूबसूरत परिधान।')}</p></div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-7"><div className="flex gap-2 overflow-x-auto pb-1">{store.categories.map((cat) => <button key={cat} onClick={() => setCategory(cat === 'All' ? 'All' : cat)} className={`px-4 py-2 text-[11px] whitespace-nowrap border transition ${category === cat || (cat === 'All' && category === 'All') ? 'bg-[#32271f] text-white border-[#32271f]' : 'border-stone-300 hover:border-stone-800'}`}>{labels(cat)}</button>)}</div><label className="flex items-center gap-2 border-b border-stone-400 py-2 text-stone-500"><Search size={15}/><input aria-label="Search products" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={text('Search the collection', 'उत्पाद खोजें')} className="bg-transparent outline-none text-xs w-full sm:w-44"/></label></div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-7 sm:gap-x-5 sm:gap-y-10">{filtered.map((p) => <ProductCard key={p.id} product={p} onClick={() => {setActiveProduct(p); setSelectedSize(p.sizes[0] || 'One size'); setSelectedColor(p.colors[0] || 'Default');}} text={text}/>)}{filtered.length === 0 && <p className="col-span-full py-10 text-center text-sm text-stone-500">{text('No available pieces match your search.', 'आपकी खोज से मेल खाता उत्पाद नहीं मिला।')}</p>}</div>
+      </div></section>
+      <section id="story" className="max-w-7xl mx-auto px-4 sm:px-8 py-16 grid md:grid-cols-2 gap-10 items-center"><div className="aspect-[4/3] overflow-hidden bg-stone-200"><img src="https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=1100&q=80" alt="Demonstration clothing collection" className="w-full h-full object-cover"/></div><div><p className="text-[10px] uppercase tracking-[.2em] text-[#a46c48]">{text('A little more personal', 'थोड़ा और व्यक्तिगत')}</p><h2 className="font-serif text-3xl sm:text-4xl leading-tight mt-3 mb-5">{text('Good clothes have a way of feeling like home.', 'अच्छे कपड़े, अपनेपन का एहसास देते हैं।')}</h2><p className="text-sm text-stone-600 leading-7">{text(`${store.name} brings together expressive Indian design and everyday ease. This demonstration store shows how your products, story and service can come together in a polished shopping experience.`, `${store.name} भारतीय डिज़ाइन और रोज़मर्रा के आराम को साथ लाता है। यह डेमो दिखाता है कि आपके उत्पाद, कहानी और सेवा एक सुंदर ऑनलाइन स्टोर में कैसे दिख सकते हैं।`)}</p><a href="#collection" className="inline-flex items-center gap-2 mt-6 text-xs uppercase tracking-widest border-b border-stone-800 pb-2">{text('Shop the collection', 'कलेक्शन खरीदें')}<ArrowRight size={14}/></a></div></section>
+      <section id="benefits" className="bg-[#eee8e0] py-12"><div className="max-w-7xl mx-auto px-4 sm:px-8 grid grid-cols-1 sm:grid-cols-3 gap-7 text-center"><div><span className="font-serif text-2xl">01</span><h3 className="text-xs uppercase tracking-widest mt-2">{text('Personal service', 'व्यक्तिगत सेवा')}</h3><p className="text-xs text-stone-600 mt-2">{text('Questions? Chat directly with the shop.', 'सवाल हैं? दुकान से सीधे बात करें।')}</p></div><div><span className="font-serif text-2xl">02</span><h3 className="text-xs uppercase tracking-widest mt-2">{text('Delivery details', 'डिलीवरी जानकारी')}</h3><p className="text-xs text-stone-600 mt-2">{text('Delivery timing and charges confirmed by the store.', 'डिलीवरी समय व शुल्क स्टोर बताएगा।')}</p></div><div><span className="font-serif text-2xl">03</span><h3 className="text-xs uppercase tracking-widest mt-2">{text('Secure conversation', 'सीधी बातचीत')}</h3><p className="text-xs text-stone-600 mt-2">{text('No payment is collected on this demo website.', 'इस डेमो वेबसाइट पर भुगतान नहीं लिया जाता।')}</p></div></div></section>
+    </main>
+    <footer className="bg-[#29241f] text-white px-5 py-10 pb-24 sm:pb-10"><div className="max-w-7xl mx-auto grid sm:grid-cols-3 gap-8"><div><h2 className="font-serif text-2xl">{store.name}</h2><p className="text-xs text-stone-300 mt-3 max-w-xs">{text('A demonstration storefront by SmartWeb Lucknow. Sample products and images are for preview only.', 'SmartWeb Lucknow का डेमो स्टोर। नमूना उत्पाद और चित्र केवल पूर्वावलोकन के लिए हैं।')}</p></div><div><h3 className="text-[10px] uppercase tracking-[.2em] text-amber-200">{text('Visit / contact', 'पता / संपर्क')}</h3><p className="text-xs text-stone-300 mt-3">{store.address}<br/>{store.phone}<br/>{store.email}</p></div><div><h3 className="text-[10px] uppercase tracking-[.2em] text-amber-200">{text('Need a store like this?', 'ऐसा स्टोर चाहिए?')}</h3><p className="text-xs text-stone-300 mt-3">{text('Custom e-commerce websites from ₹2,999.', '₹2,999 से कस्टम ई-कॉमर्स वेबसाइट।')}</p><button onClick={openAdmin} className="mt-4 text-[10px] text-stone-400 underline underline-offset-4">{text('Demo Admin / customize', 'डेमो एडमिन / कस्टमाइज़')}</button></div></div><div className="max-w-7xl mx-auto border-t border-white/15 mt-8 pt-5 flex justify-between text-[10px] text-stone-400"><span>© {new Date().getFullYear()} {store.name} · {text('Demo store', 'डेमो स्टोर')}</span><span>{text('No real orders or payments are processed.', 'असली ऑर्डर या भुगतान नहीं होते।')}</span></div></footer>
+    {notice && <div role="status" className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[80] bg-[#29241f] text-white text-xs px-5 py-3 shadow-xl max-w-[90vw] text-center">{notice}</div>}
+    <button onClick={() => setDrawer('cart')} className="fixed md:hidden bottom-3 right-3 z-20 rounded-full bg-[#32271f] text-white px-4 py-3 shadow-xl flex items-center gap-2 text-xs"><ShoppingBag size={16}/>{text('Bag', 'बैग')} ({cartCount})</button>
 
-      <header className="bg-white border-b border-stone-200 sticky top-0 z-20 shadow-xs">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <span className="text-xl font-bold tracking-tight text-amber-950 block">
-              {config.businessName}
-            </span>
-            <span className="text-xs text-stone-500 flex items-center gap-1">
-              <MapPin className="w-3 h-3 text-amber-800" />
-              {config.city} {isHi ? 'मार्केट' : 'Market'}
-            </span>
-          </div>
+    {activeProduct && <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-5" onClick={() => setActiveProduct(null)}><div role="dialog" aria-modal="true" aria-label={activeProduct.name} onClick={(e) => e.stopPropagation()} className="bg-[#fbf9f6] w-full sm:max-w-3xl max-h-[92vh] overflow-y-auto grid sm:grid-cols-2 relative"><button onClick={() => setActiveProduct(null)} className="absolute right-3 top-3 z-10 p-2 rounded-full bg-white/90" aria-label="Close product"><X size={18}/></button><img src={activeProduct.image} alt={activeProduct.name} className="w-full h-72 sm:h-full object-cover"/><div className="p-6 sm:p-8"><p className="text-[10px] uppercase tracking-widest text-[#a46c48]">{activeProduct.category}</p><h2 className="font-serif text-2xl mt-2">{activeProduct.name}</h2><p className="mt-3 text-sm text-stone-600 leading-6">{activeProduct.description}</p><div className="mt-4 flex gap-3 items-center"><strong>{money(activeProduct.price)}</strong>{activeProduct.compareAt && <del className="text-xs text-stone-400">{money(activeProduct.compareAt)}</del>}</div><div className="mt-5"><p className="text-[10px] uppercase tracking-widest mb-2">{text('Size', 'साइज़')}</p><div className="flex flex-wrap gap-2">{activeProduct.sizes.map((size) => <button key={size} onClick={() => setSelectedSize(size)} className={`px-3 py-2 border text-xs ${selectedSize === size ? 'border-[#32271f] bg-[#32271f] text-white' : 'border-stone-300'}`}>{size}</button>)}</div></div><div className="mt-4"><p className="text-[10px] uppercase tracking-widest mb-2">{text('Colour', 'रंग')}</p><div className="flex flex-wrap gap-2">{activeProduct.colors.map((color) => <button key={color} onClick={() => setSelectedColor(color)} className={`px-3 py-2 border text-xs ${selectedColor === color ? 'border-[#32271f] bg-[#32271f] text-white' : 'border-stone-300'}`}>{color}</button>)}</div></div><p className="text-xs text-stone-500 mt-4">{activeProduct.stock} {text('available in this demo', 'इस डेमो में उपलब्ध')}</p><button onClick={() => addToCart(activeProduct, selectedSize, selectedColor)} className="w-full mt-5 bg-[#32271f] text-white py-3 text-xs uppercase tracking-widest">{text('Add to bag', 'बैग में डालें')} · {money(activeProduct.price)}</button></div></div></div>}
 
-          <div className="flex items-center gap-2">
-            <a
-              href={`tel:${config.phone}`}
-              className="p-2 text-stone-700 hover:text-amber-900 bg-stone-100 rounded-lg flex items-center gap-1 text-xs font-semibold"
-            >
-              <Phone className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{isHi ? 'कॉल करें' : 'Call'}</span>
-            </a>
-            <a
-              href={`https://wa.me/${config.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(`Hello ${config.businessName}, I want to check latest stock.`)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-1.5 text-xs font-semibold shadow-xs"
-            >
-              <MessageCircle className="w-3.5 h-3.5" />
-              <span>{isHi ? 'व्हाट्सएप चैट' : 'WhatsApp'}</span>
-            </a>
-          </div>
-        </div>
-      </header>
-
-      {/* Hero Banner */}
-      <section className="bg-gradient-to-b from-amber-50 to-stone-100 py-8 px-4 border-b border-stone-200">
-        <div className="max-w-4xl mx-auto text-center">
-          <span className="text-xs font-semibold tracking-wider uppercase text-amber-800 mb-2 inline-block">
-            {isHi ? 'प्रामाणिक पारंपरिक वस्त्र भंडार' : 'Authentic Traditional & Modern Apparel'}
-          </span>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-stone-900 tracking-tight mb-2">
-            {isHi 
-              ? `${config.businessName} - शादी व त्योहारों की बेहतरीन खरीदारी` 
-              : `Welcome to ${config.businessName} - Festive & Daily Wear`}
-          </h1>
-          <p className="text-stone-600 text-sm max-w-xl mx-auto mb-4">
-            {isHi 
-              ? 'सर्वोत्तम गुणवत्ता, उचित दाम और लखनवी कारीगरी का अनूठा संगम। घर बैठे व्हाट्सएप पर ऑर्डर करें या दुकान पर पधारें।'
-              : 'Handcrafted sarees, stylish suits, and kurtas at wholesale and retail rates. Order on WhatsApp or visit our showroom.'}
-          </p>
-
-          <div className="flex flex-wrap justify-center gap-2 text-xs text-stone-600">
-            <span className="bg-white px-3 py-1.5 rounded-full border border-stone-200 flex items-center gap-1">
-              <Check className="w-3 h-3 text-emerald-600" /> {isHi ? '100% शुद्ध कॉटन' : '100% Pure Fabric'}
-            </span>
-            <span className="bg-white px-3 py-1.5 rounded-full border border-stone-200 flex items-center gap-1">
-              <Check className="w-3 h-3 text-emerald-600" /> {isHi ? 'होम डिलीवरी उपलब्ध' : 'Home Delivery in Lucknow'}
-            </span>
-            <span className="bg-white px-3 py-1.5 rounded-full border border-stone-200 flex items-center gap-1">
-              <Check className="w-3 h-3 text-emerald-600" /> {isHi ? 'UPI व कैश स्वीकार्य' : 'Cash & UPI Accepted'}
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* Category Filter */}
-      <div className="max-w-5xl mx-auto px-4 mt-6">
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-          <button
-            onClick={() => setSelectedCategory('all')}
-            className={`px-3.5 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-colors ${
-              selectedCategory === 'all'
-                ? 'bg-amber-900 text-white'
-                : 'bg-white text-stone-700 border border-stone-200 hover:bg-stone-100'
-            }`}
-          >
-            {isHi ? 'सभी उत्पाद' : 'All Products'}
-          </button>
-          <button
-            onClick={() => setSelectedCategory('clothing')}
-            className={`px-3.5 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-colors ${
-              selectedCategory === 'clothing'
-                ? 'bg-amber-900 text-white'
-                : 'bg-white text-stone-700 border border-stone-200 hover:bg-stone-100'
-            }`}
-          >
-            {isHi ? 'कुर्ता व दुपट्टा' : 'Kurtas & Dupattas'}
-          </button>
-          <button
-            onClick={() => setSelectedCategory('festive')}
-            className={`px-3.5 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-colors ${
-              selectedCategory === 'festive'
-                ? 'bg-amber-900 text-white'
-                : 'bg-white text-stone-700 border border-stone-200 hover:bg-stone-100'
-            }`}
-          >
-            {isHi ? 'साड़ी व अनारकली' : 'Sarees & Anarkalis'}
-          </button>
-          <button
-            onClick={() => setSelectedCategory('daily')}
-            className={`px-3.5 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-colors ${
-              selectedCategory === 'daily'
-                ? 'bg-amber-900 text-white'
-                : 'bg-white text-stone-700 border border-stone-200 hover:bg-stone-100'
-            }`}
-          >
-            {isHi ? 'डेली वियर व कॉम्बो' : 'Daily Wear & Combos'}
-          </button>
-        </div>
-
-        {cartNotice && (
-          <div className="mt-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-2 rounded-lg flex items-center justify-between animate-fade-in">
-            <span>
-              {isHi ? `व्हाट्सएप पर "${cartNotice}" की पूछताछ तैयार हो गई है!` : `Opening WhatsApp for "${cartNotice}"...`}
-            </span>
-          </div>
-        )}
-
-        {/* Product Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-          {filteredProducts.map((p) => (
-            <div
-              key={p.id}
-              className="bg-white rounded-xl border border-stone-200 p-4 flex flex-col justify-between hover:border-amber-400 transition-colors shadow-2xs"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded">
-                    {p.tag}
-                  </span>
-                  <span className="text-xs text-stone-400 line-through">₹{p.originalPrice}</span>
-                </div>
-                <h3 className="font-semibold text-stone-900 text-base leading-snug mb-1">
-                  {p.name}
-                </h3>
-                <p className="text-stone-500 text-xs leading-relaxed mb-3">
-                  {p.desc}
-                </p>
-              </div>
-
-              <div className="pt-3 border-t border-stone-100 flex items-center justify-between">
-                <div>
-                  <span className="text-lg font-bold text-amber-950 tabular-nums">
-                    ₹{p.price}
-                  </span>
-                  <span className="text-[11px] text-emerald-600 font-medium block">
-                    {Math.round(((p.originalPrice - p.price) / p.originalPrice) * 100)}% {isHi ? 'बचत' : 'OFF'}
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => handleOrder(p.name, p.price)}
-                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
-                >
-                  <MessageCircle className="w-3.5 h-3.5" />
-                  <span>{isHi ? 'व्हाट्सएप ऑर्डर' : 'Order on WhatsApp'}</span>
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Store Location & Timing Card */}
-      <div className="max-w-5xl mx-auto px-4 mt-8">
-        <div className="bg-white rounded-xl border border-stone-200 p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-amber-50 text-amber-900 rounded-lg shrink-0">
-              <MapPin className="w-4 h-4" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-stone-900 uppercase tracking-wide">
-                {isHi ? 'दुकान का पता' : 'Shop Address'}
-              </h4>
-              <p className="text-xs text-stone-600 mt-0.5">
-                Shop No. 14, Main Market, {config.city}, UP. Near City Square.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-amber-50 text-amber-900 rounded-lg shrink-0">
-              <Clock className="w-4 h-4" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-stone-900 uppercase tracking-wide">
-                {isHi ? 'खुलने का समय' : 'Store Timings'}
-              </h4>
-              <p className="text-xs text-stone-600 mt-0.5">
-                {isHi ? 'सोमवार - शनिवार: 10:30 AM - 9:00 PM' : 'Mon - Sat: 10:30 AM - 9:00 PM'}
-                <br />
-                {isHi ? 'रविवार: 12:00 PM - 8:00 PM' : 'Sunday: 12:00 PM - 8:00 PM'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-amber-50 text-amber-900 rounded-lg shrink-0">
-              <Phone className="w-4 h-4" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-stone-900 uppercase tracking-wide">
-                {isHi ? 'संपर्क व पूछताछ' : 'Inquiries & WhatsApp'}
-              </h4>
-              <p className="text-xs text-stone-600 mt-0.5">
-                {config.phone}
-                <br />
-                {isHi ? 'थोक व फुटकर ऑर्डर के लिए संपर्क करें' : 'Contact for wholesale & retail inquiries'}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+    {drawer && <div className="fixed inset-0 z-[60] bg-black/50 flex justify-end" onClick={() => {setDrawer(null); setFormError('');}}><aside role="dialog" aria-modal="true" aria-label={drawer === 'cart' ? 'Shopping bag' : drawer === 'checkout' ? 'Checkout' : 'Demo admin'} onClick={(e) => e.stopPropagation()} className="w-full max-w-lg bg-[#fbf9f6] h-full overflow-y-auto shadow-2xl">
+      <div className="sticky top-0 z-10 bg-[#fbf9f6] border-b border-stone-200 px-5 py-4 flex items-center justify-between"><div className="flex items-center gap-3"><button onClick={() => drawer === 'checkout' ? setDrawer('cart') : setDrawer(null)} className="p-1" aria-label="Back"><ArrowLeft size={18}/></button><h2 className="font-serif text-xl">{drawer === 'cart' ? text('Your bag', 'आपका बैग') : drawer === 'checkout' ? text('Delivery details', 'डिलीवरी जानकारी') : text('Store demo admin', 'स्टोर डेमो एडमिन')}</h2></div><button onClick={() => setDrawer(null)} aria-label="Close"><X size={20}/></button></div>
+      {drawer === 'cart' && <div className="p-5">{cart.length === 0 ? <div className="py-14 text-center"><ShoppingBag className="mx-auto text-stone-400" size={32}/><p className="mt-4 font-serif text-xl">{text('Your bag is waiting.', 'आपका बैग खाली है।')}</p><button onClick={() => setDrawer(null)} className="mt-5 underline text-xs">{text('Continue shopping', 'खरीदारी जारी रखें')}</button></div> : <><div className="space-y-5">{cart.map((line) => { const p = productById(line.productId); if (!p) return null; return <div key={`${line.productId}-${line.size}-${line.color}`} className="flex gap-4 border-b border-stone-200 pb-5"><img src={p.image} alt="" className="w-24 h-28 object-cover"/><div className="flex-1"><h3 className="font-serif">{p.name}</h3><p className="text-xs text-stone-500 mt-1">{line.size} · {line.color}</p><p className="text-sm mt-2">{money(p.price)}</p><div className="flex items-center gap-3 mt-3"><button onClick={() => changeQuantity(line, -1)} aria-label="Decrease quantity"><Minus size={14}/></button><span className="text-xs">{line.quantity}</span><button onClick={() => changeQuantity(line, 1)} aria-label="Increase quantity"><Plus size={14}/></button><button onClick={() => setCart((c) => c.filter((x) => x !== line))} className="ml-auto text-[10px] underline text-stone-500">{text('Remove', 'हटाएँ')}</button></div></div></div>; })}</div><div className="mt-6 border-t border-stone-300 pt-5"><div className="flex justify-between text-sm"><span>{text('Subtotal', 'कुल')}</span><strong>{money(subtotal)}</strong></div><p className="text-[11px] text-stone-500 mt-2">{text('Delivery is confirmed by the shop. No payment is collected here.', 'डिलीवरी की जानकारी दुकान देगी। यहाँ कोई भुगतान नहीं होता।')}</p><button onClick={() => {setFormError('');setDrawer('checkout');}} className="w-full mt-5 bg-[#32271f] text-white py-3 text-xs uppercase tracking-widest">{text('Continue to checkout', 'चेकआउट जारी रखें')}</button></div></>}</div>}
+      {drawer === 'checkout' && <form onSubmit={sendOrder} className="p-5 space-y-4"><div className="bg-stone-100 p-4 text-xs"><div className="flex justify-between"><span>{cartCount} {text('items', 'उत्पाद')}</span><strong>{money(subtotal)}</strong></div><p className="text-stone-500 mt-1">{text('Delivery: confirm with store · Total due: confirm with store', 'डिलीवरी: दुकान से पूछें · अंतिम राशि: दुकान से पुष्टि')}</p></div>{[['name','Full name','पूरा नाम'],['mobile','Mobile number','मोबाइल नंबर'],['address','Full address','पूरा पता'],['city','City','शहर'],['pin','PIN code','पिन कोड']].map(([key,en,hi])=><label key={key} className="block text-xs">{text(en,hi)}<input required name={key} value={customer[key as keyof Customer]} onChange={(e) => setCustomer((c) => ({...c,[key]:e.target.value}))} inputMode={key === 'mobile' || key === 'pin' ? 'numeric' : undefined} maxLength={key === 'mobile' ? 10 : key === 'pin' ? 6 : undefined} className="w-full border border-stone-300 bg-white px-3 py-3 mt-1 outline-none focus:border-stone-800"/></label>)}{formError && <p role="alert" className="text-xs text-red-700">{formError}</p>}<button className="w-full bg-[#147b53] text-white py-3 text-xs uppercase tracking-widest">{text('Prepare WhatsApp order', 'WhatsApp ऑर्डर तैयार करें')}</button><p className="text-[10px] text-stone-500 text-center">{text('This opens a message draft only. It does not create an order or process payment.', 'यह केवल संदेश ड्राफ्ट खोलता है। ऑर्डर या भुगतान नहीं होता।')}</p></form>}
+      {drawer === 'admin' && <div className="p-5">{!adminReady ? <><div className="bg-amber-50 border border-amber-200 p-4 text-xs leading-5 mb-5"><strong>{text('Demo only — not secure authentication.', 'केवल डेमो — सुरक्षित लॉगिन नहीं।')}</strong><br/>{text('Data is stored in this browser only. Production requires server authentication and a database.', 'डेटा केवल इस ब्राउज़र में सेव होता है। असली उपयोग में सर्वर लॉगिन और डेटाबेस जरूरी हैं।')}</div><form onSubmit={loginAdmin} className="space-y-3"><label className="block text-xs">{text('Demo password', 'डेमो पासवर्ड')}<input type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} className="w-full border px-3 py-3 mt-1" placeholder="demo123"/></label>{formError && <p role="alert" className="text-xs text-red-700">{formError}</p>}<button className="w-full bg-[#32271f] text-white py-3 text-xs uppercase tracking-widest">{text('Enter demo admin', 'डेमो एडमिन खोलें')}</button></form></> : <><div className="flex border-b border-stone-200 mb-5"><button onClick={() => setAdminTab('products')} className={`px-4 py-3 text-xs ${adminTab==='products'?'border-b-2 border-stone-900':''}`}>{text('Products', 'उत्पाद')}</button><button onClick={() => setAdminTab('store')} className={`px-4 py-3 text-xs ${adminTab==='store'?'border-b-2 border-stone-900':''}`}>{text('Store settings', 'स्टोर सेटिंग')}</button></div>{adminTab==='products' ? <><button onClick={() => setEditing({id:'',name:'',description:'',price:0,category:'Kurtas',image:'',sizes:['S','M','L'],colors:['Ivory'],stock:1})} className="w-full border border-stone-400 py-3 text-xs mb-4">＋ {text('Add a product', 'नया उत्पाद जोड़ें')}</button>{editing && <form key={editing.id || 'new'} onSubmit={saveProduct} className="space-y-3 bg-white p-4 mb-5 border">{[['name','Name'],['description','Description'],['price','Price (INR)'],['compareAt','Compare at price'],['category','Category'],['image','Image URL'],['sizes','Sizes (comma separated)'],['colors','Colors (comma separated)'],['stock','Available stock']].map(([key,label])=><label key={key} className="block text-[11px]">{label}<input required={['name','price','category','image','stock'].includes(key)} name={key} defaultValue={key==='sizes'||key==='colors' ? (editing[key as 'sizes'|'colors'] as string[]).join(', ') : String(editing[key as keyof StoreProduct] ?? '')} className="w-full border px-2 py-2 mt-1"/></label>)}<label className="text-xs flex gap-2"><input type="checkbox" name="featured" defaultChecked={editing.featured}/> Featured item</label>{formError && <p className="text-xs text-red-700">{formError}</p>}<div className="flex gap-2"><button className="flex-1 bg-[#32271f] text-white py-2 text-xs">{text('Save', 'सेव')}</button><button type="button" onClick={() => {setEditing(null);setFormError('');}} className="px-4 border text-xs">{text('Cancel', 'रद्द')}</button></div></form>}<div className="space-y-3">{products.map((p) => <div key={p.id} className="flex gap-3 border-b pb-3"><img src={p.image} alt="" className="w-14 h-16 object-cover"/><div className="flex-1 min-w-0"><p className="text-xs font-medium truncate">{p.name}</p><p className="text-[10px] text-stone-500">{money(p.price)} · {p.stock} {text('in stock','उपलब्ध')}</p><div className="flex gap-3 mt-2"><button onClick={() => setEditing(p)} className="text-[10px] underline">{text('Edit','बदलें')}</button><button onClick={() => {setProducts((all)=>all.filter((x)=>x.id!==p.id));setCart((all)=>all.filter((x)=>x.productId!==p.id));}} className="text-[10px] underline text-red-700">{text('Delete','हटाएँ')}</button></div></div></div>)}</div></> : <div className="space-y-3">{([['name','Store name'],['logo','Logo image URL'],['primary','Brand color (hex)'],['accent','Accent color (hex)'],['whatsapp','Real WhatsApp number, country code'],['phone','Contact phone'],['email','Contact email'],['address','Store address'],['banner','Announcement banner']] as const).map(([key,label])=><label key={key} className="block text-xs">{label}<input value={store[key]} onChange={(e)=>setStore((s)=>({...s,[key]:e.target.value}))} placeholder={key==='whatsapp'?'+91...':''} className="w-full border px-3 py-2 mt-1"/></label>)}<label className="block text-xs">{text('Categories (comma separated)','कैटेगरी (कॉमा लगाकर)')}<input value={store.categories.join(', ')} onChange={(e)=>setStore((s)=>({...s,categories:['All',...e.target.value.split(',').map((x)=>x.trim()).filter((x)=>x&&x!=='All')]}))} className="w-full border px-3 py-2 mt-1"/></label><label className="block text-xs">{text('Language','भाषा')}<select value={store.language} onChange={(e)=>setStore((s)=>({...s,language:e.target.value as 'en'|'hi'}))} className="w-full border px-3 py-2 mt-1"><option value="en">English</option><option value="hi">हिंदी</option></select></label><button onClick={saveStore} className="w-full bg-[#32271f] text-white py-3 text-xs uppercase tracking-widest">{text('Save store settings','स्टोर सेटिंग सेव करें')}</button><button onClick={()=>{localStorage.removeItem(STORE_KEY);localStorage.removeItem(PRODUCT_KEY);localStorage.removeItem(CART_KEY);setStore(defaultClothingStore);setProducts(demoClothingProducts);setCart([]);setNotice(text('Demo reset','डेमो रीसेट हुआ'));}} className="w-full text-xs underline text-stone-500">{text('Reset demo data on this device','इस डिवाइस का डेमो डेटा रीसेट करें')}</button></div>}<p className="text-[10px] text-stone-500 mt-6 border-t pt-4">{text('Changes stay in this browser. Never use this demo password or localStorage admin for a live store.', 'बदलाव इसी ब्राउज़र में रहते हैं। लाइव स्टोर में यह पासवर्ड या localStorage एडमिन इस्तेमाल न करें।')}</p></>}</div>}
+    </aside></div>}
+  </div>;
 };
+
+function ProductCard({ product, onClick, text }: { product: StoreProduct; onClick: () => void; text: (en: string, hi: string) => string }) {
+  return <button onClick={onClick} className="group text-left min-w-0"><div className="relative aspect-[4/5] overflow-hidden bg-stone-100"><img src={product.image} alt={product.name} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"/>{product.isNew && <span className="absolute top-2 left-2 bg-white/90 px-2 py-1 text-[9px] uppercase tracking-widest">{text('New', 'नया')}</span>}<span className="absolute top-2 right-2 bg-white/90 p-1.5 rounded-full"><Heart size={13}/></span><span className="absolute bottom-2 right-2 bg-white text-stone-900 px-3 py-2 text-[10px] uppercase tracking-widest opacity-100 sm:opacity-0 group-hover:opacity-100 transition">{text('Quick view', 'देखें')} +</span></div><div className="pt-3 flex justify-between gap-2"><div className="min-w-0"><p className="font-serif text-sm sm:text-base truncate">{product.name}</p><p className="text-[10px] text-stone-500 mt-1">{product.category}</p></div><div className="text-right shrink-0"><p className="text-xs font-medium">{money(product.price)}</p>{product.compareAt && <del className="text-[10px] text-stone-400">{money(product.compareAt)}</del>}</div></div></button>;
+}
