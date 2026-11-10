@@ -14,6 +14,8 @@ export type StoreProduct = {
   isNew?: boolean;
 };
 
+export type StoreCurrency = 'INR' | 'USD' | 'EUR' | 'GBP';
+
 export type ClothingStoreConfig = {
   name: string;
   logo: string;
@@ -24,7 +26,8 @@ export type ClothingStoreConfig = {
   email: string;
   address: string;
   banner: string;
-  currency: 'INR';
+  heroImage: string;
+  currency: StoreCurrency;
   language: 'en' | 'hi';
   categories: string[];
 };
@@ -34,12 +37,13 @@ export const defaultClothingStore: ClothingStoreConfig = {
   logo: '',
   primary: '#32271f',
   accent: '#a46c48',
-  // Deliberately blank: enter the shop owner's real WhatsApp number in the demo admin.
+  // Deliberately blank: the owner must add a real WhatsApp number in demo admin.
   whatsapp: '',
-  phone: '+91 00000 00000',
-  email: 'hello@example.com',
-  address: 'Hazratganj, Lucknow, Uttar Pradesh',
+  phone: '',
+  email: '',
+  address: 'Lucknow, Uttar Pradesh',
   banner: 'A little tradition, a lot of you. Discover the new season edit.',
+  heroImage: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=1800&q=85',
   currency: 'INR',
   language: 'en',
   categories: ['All', 'Kurtas', 'Sarees', 'Dresses', 'Accessories'],
@@ -47,6 +51,7 @@ export const defaultClothingStore: ClothingStoreConfig = {
 
 const photo = (id: string) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=900&q=80`;
 
+// Illustrative sample inventory and photography for the reusable store demo.
 export const demoClothingProducts: StoreProduct[] = [
   { id: 'kurta-01', name: 'The Noor Chikankari Kurta', description: 'An easy, airy cotton kurta with delicate hand-inspired chikankari detailing. A versatile piece for slow mornings and festive evenings.', price: 1890, compareAt: 2490, category: 'Kurtas', image: photo('photo-1583743814966-8936f37f4678'), sizes: ['S', 'M', 'L', 'XL'], colors: ['Ivory', 'Sage'], stock: 12, featured: true, bestseller: true },
   { id: 'saree-01', name: 'Gulab Chanderi Saree', description: 'A luminous Chanderi-inspired drape in a soft rose hue, finished with a subtle woven border. Includes an unstitched blouse piece.', price: 3290, compareAt: 3990, category: 'Sarees', image: photo('photo-1610030469983-98e550d6193c'), sizes: ['One size'], colors: ['Rose'], stock: 7, featured: true, isNew: true },
